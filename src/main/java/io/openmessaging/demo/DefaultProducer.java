@@ -78,4 +78,8 @@ public class DefaultProducer  implements Producer {
     @Override public BatchToPartition createBatchToPartition(String partitionName, KeyValue properties) {
         throw new UnsupportedOperationException("Unsupported");
     }
+
+    @Override public void flush() {
+
+    }
 }

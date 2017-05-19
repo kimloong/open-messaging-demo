@@ -32,11 +32,9 @@ public class DefaultPullConsumer implements PullConsumer {
         if (buckets.size() == 0 || queue == null) {
             return null;
         }
-        //use Round Robin
-        int checkNum = 0;
-        while (++checkNum <= bucketList.size()) {
-            String bucket = bucketList.get((++lastIndex) % (bucketList.size()));
-            Message message = messageStore.pullMessage(queue, bucket);
+
+        for (int i = 0; i < bucketList.size(); i++) {
+            Message message = messageStore.pullMessage(queue, bucketList.get(i));
             if (message != null) {
                 return message;
             }
