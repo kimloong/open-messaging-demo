@@ -1,46 +1,134 @@
 package io.openmessaging.demo;
 
+import io.openmessaging.KeyValue;
 import io.openmessaging.Message;
-import java.util.ArrayList;
+import io.openmessaging.Producer;
+import io.openmessaging.PullConsumer;
+import io.openmessaging.exception.OMSRuntimeException;
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
 
 public class MessageStore {
 
     private static final MessageStore INSTANCE = new MessageStore();
 
-    public static MessageStore getInstance() {
+    private static final int BYTE_BUFFER_POOL_SIZE = 20;
+    private static final int META_SIZE = 4;
+    private static final int MAX_MESSAGE_SIZE = 256 * 1024;
+
+    private final Map<String, RandomAccessFile> writeAccessMap = new HashMap<>();
+
+    private final Map<String, RandomAccessFile> readAccessMap = new ConcurrentHashMap<>();
+    private final BlockingQueue<ByteBuffer> byteBufferPool = new LinkedBlockingDeque<>(BYTE_BUFFER_POOL_SIZE);
+    private String storePath;
+    private OMSSerializer serializer = new OMSCustomSerializer();
+
+    public MessageStore() {
+        for (int i = 0; i < BYTE_BUFFER_POOL_SIZE; i++) {
+            byteBufferPool.add(ByteBuffer.allocate(MAX_MESSAGE_SIZE + META_SIZE));
+        }
+    }
+
+    public static MessageStore getInstance(KeyValue properties) {
+        INSTANCE.storePath = properties.getString("STORE_PATH");
         return INSTANCE;
     }
 
-    private Map<String, ArrayList<Message>> messageBuckets = new HashMap<>();
+    public void putMessage(String bucket, Message message) {
+        RandomAccessFile writeAccess;
+        FileChannel writeChannel;
+        ByteBuffer writeByteBuffer = null;
+        try {
+            writeAccess = writeAccessMap.get(bucket);
+            if (null == writeAccess) {
+                synchronized (writeAccessMap) {
+                    writeAccess = writeAccessMap.get(bucket);
+                    if (null == writeAccess) {
+                        File file = new File(storePath, bucket);
+                        writeAccess = new RandomAccessFile(file, "rw");
+                        if (!file.createNewFile()) {
+                            writeAccess.seek(file.length());
+                        }
+                        writeAccessMap.put(bucket, writeAccess);
+                    }
+                }
+            }
 
-    private Map<String, HashMap<String, Integer>> queueOffsets = new HashMap<>();
 
-    public synchronized void putMessage(String bucket, Message message) {
-        if (!messageBuckets.containsKey(bucket)) {
-            messageBuckets.put(bucket, new ArrayList<>(1024));
+            synchronized (writeAccess) {
+                writeChannel = writeAccess.getChannel();
+
+                writeByteBuffer = byteBufferPool.take();
+                writeByteBuffer.clear();
+                serializer.serializeMessage(message,writeByteBuffer);
+
+                writeChannel.write(writeByteBuffer);
+            }
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+            throw new OMSRuntimeException();
+        } finally {
+            if (null != writeByteBuffer) {
+                byteBufferPool.add(writeByteBuffer);
+            }
         }
-        ArrayList<Message> bucketList = messageBuckets.get(bucket);
-        bucketList.add(message);
     }
 
-   public synchronized Message pullMessage(String queue, String bucket) {
-        ArrayList<Message> bucketList = messageBuckets.get(bucket);
-        if (bucketList == null) {
-            return null;
+    public Message pullMessage(String queue, String bucket) {
+        RandomAccessFile readAccess = null;
+        FileChannel readChannel = null;
+        ByteBuffer readByteBuffer = null;
+        try {
+            String key = queue + "@" + bucket;
+            readAccess = readAccessMap.get(key);
+            if (null == readAccess) {
+                synchronized (readAccessMap) {
+                    readAccess = readAccessMap.get(key);
+                    if (null == readAccess) {
+                        File file = new File(storePath, bucket);
+                        if (!file.exists()) {
+                            return null;
+                        }
+                        readAccess = new RandomAccessFile(file, "r");
+                        readAccessMap.put(key, readAccess);
+                    }
+                }
+            }
+            synchronized (readAccess) {
+                readChannel = readAccess.getChannel();
+
+                readByteBuffer = byteBufferPool.take();
+
+                readByteBuffer.clear();
+                readByteBuffer.limit(4);
+                readChannel.read(readByteBuffer);
+                if (readByteBuffer.position() == 0) {
+                    return null;
+                }
+                readByteBuffer.flip();
+                int length = readByteBuffer.getInt();
+
+                readByteBuffer.clear();
+                readByteBuffer.limit(length);
+                readChannel.read(readByteBuffer);
+                readByteBuffer.flip();
+            }
+            return serializer.deserializeMessage(readByteBuffer);
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+            throw new OMSRuntimeException();
+        } finally {
+            if (null != readByteBuffer) {
+                byteBufferPool.add(readByteBuffer);
+            }
         }
-        HashMap<String, Integer> offsetMap = queueOffsets.get(queue);
-        if (offsetMap == null) {
-            offsetMap = new HashMap<>();
-            queueOffsets.put(queue, offsetMap);
-        }
-        int offset = offsetMap.getOrDefault(bucket, 0);
-        if (offset >= bucketList.size()) {
-            return null;
-        }
-        Message message = bucketList.get(offset);
-        offsetMap.put(bucket, ++offset);
-        return message;
-   }
+    }
 }

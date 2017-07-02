@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Set;
 
 public class DefaultPullConsumer implements PullConsumer {
-    private MessageStore messageStore = MessageStore.getInstance();
+    private MessageStore messageStore;
     private KeyValue properties;
     private String queue;
     private Set<String> buckets = new HashSet<>();
@@ -20,6 +20,7 @@ public class DefaultPullConsumer implements PullConsumer {
 
     public DefaultPullConsumer(KeyValue properties) {
         this.properties = properties;
+        messageStore = MessageStore.getInstance(this.properties);
     }
 
 
