@@ -63,12 +63,12 @@ public class MessageStore {
             }
 
 
+            writeByteBuffer = byteBufferPool.take();
+            writeByteBuffer.clear();
+            serializer.serializeMessage(message,writeByteBuffer);
+
             synchronized (writeAccess) {
                 writeChannel = writeAccess.getChannel();
-
-                writeByteBuffer = byteBufferPool.take();
-                writeByteBuffer.clear();
-                serializer.serializeMessage(message,writeByteBuffer);
 
                 writeChannel.write(writeByteBuffer);
             }
