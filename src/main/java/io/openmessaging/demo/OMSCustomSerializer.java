@@ -40,7 +40,7 @@ public class OMSCustomSerializer implements OMSSerializer {
 
     @Override
     public Message deserializeMessage(ByteBuffer byteBuffer) {
-        int totalLength = byteBuffer.limit() - 12;
+        int totalLength = byteBuffer.remaining() - 8;
         int headerLength = byteBuffer.getInt();
         int propertiesLength = byteBuffer.getInt();
         int bodyLength = totalLength - headerLength - propertiesLength;
@@ -303,18 +303,5 @@ public class OMSCustomSerializer implements OMSSerializer {
     private static void serializeByteHeader(byte headerByte, byte value, ByteBuffer byteBuffer) {
         byteBuffer.put(headerByte);
         byteBuffer.put(value);
-    }
-
-    public static void main(String[] args) {
-        ByteBuffer byteBuffer = ByteBuffer.allocate(100);
-        byte[] bytes1 = "欢迎你".getBytes(CHARSET);
-        byteBuffer.put(bytes1);
-        byte[] bytes2 = "北京".getBytes(CHARSET);
-        byteBuffer.put(bytes2);
-        byteBuffer.flip();
-
-        System.out.println(new String(byteBuffer.array(), byteBuffer.position(), bytes1.length, CHARSET));
-        byteBuffer.position(byteBuffer.position() + bytes1.length);
-        System.out.println(new String(byteBuffer.array(), byteBuffer.position(), bytes2.length, CHARSET));
     }
 }
