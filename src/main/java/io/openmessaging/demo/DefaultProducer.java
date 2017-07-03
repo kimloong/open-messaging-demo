@@ -11,12 +11,13 @@ import io.openmessaging.Promise;
 
 public class DefaultProducer  implements Producer {
     private MessageFactory messageFactory = new DefaultMessageFactory();
-    private MessageStore messageStore = MessageStore.getInstance();
+    private MessageStore messageStore;
 
     private KeyValue properties;
 
     public DefaultProducer(KeyValue properties) {
         this.properties = properties;
+        messageStore = MessageStore.getInstance(properties);
     }
 
 
