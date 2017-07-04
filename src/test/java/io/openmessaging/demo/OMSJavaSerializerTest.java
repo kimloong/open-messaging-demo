@@ -42,7 +42,7 @@ public class OMSJavaSerializerTest {
                 DefaultBytesMessage deserializeMessage = null;
                 startTime = System.currentTimeMillis();
                 for (int i = 0; i < TIMES; i++) {
-                    deserializeMessage = (DefaultBytesMessage) serializer.deserializeMessage(byteBuffer);
+                    deserializeMessage = (DefaultBytesMessage) serializer.deserializeMessage(byteBuffer, totalLength);
                     byteBuffer.position(4);
                 }
                 cost = System.currentTimeMillis() - startTime;

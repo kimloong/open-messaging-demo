@@ -26,9 +26,9 @@ public class OMSJavaSerializer implements OMSSerializer{
         }
     }
 
-    public Message deserializeMessage(ByteBuffer byteBuffer) {
+    public Message deserializeMessage(ByteBuffer byteBuffer,int length) {
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(
-                byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
+                byteBuffer.array(), byteBuffer.position(), length);
         try (ObjectInputStream inputStream = new ObjectInputStream(byteArrayInputStream)) {
             return (Message) inputStream.readObject();
         } catch (IOException | ClassNotFoundException e) {

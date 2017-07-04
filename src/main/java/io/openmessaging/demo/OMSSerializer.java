@@ -11,5 +11,5 @@ public interface OMSSerializer {
 
     void serializeMessage(Message message,ByteBuffer buffer);
 
-    Message deserializeMessage(ByteBuffer byteBuffer);
+    Message deserializeMessage(ByteBuffer byteBuffer, int length);
 }

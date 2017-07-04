@@ -2,18 +2,16 @@ package io.openmessaging.demo;
 
 import io.openmessaging.KeyValue;
 import io.openmessaging.Message;
-import io.openmessaging.Producer;
-import io.openmessaging.PullConsumer;
 import io.openmessaging.exception.OMSRuntimeException;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
 
 public class MessageStore {
@@ -23,11 +21,13 @@ public class MessageStore {
     private static final int BYTE_BUFFER_POOL_SIZE = 20;
     private static final int META_SIZE = 4;
     private static final int MAX_MESSAGE_SIZE = 256 * 1024;
+    private static final int READ_BUFFER_SIZE = 1024 * 1024;
 
     private final Map<String, RandomAccessFile> writeAccessMap = new HashMap<>();
 
-    private final Map<String, RandomAccessFile> readAccessMap = new ConcurrentHashMap<>();
+    private final Map<String, RandomAccessFile> readAccessMap = new HashMap<>();
     private final BlockingQueue<ByteBuffer> byteBufferPool = new LinkedBlockingDeque<>(BYTE_BUFFER_POOL_SIZE);
+    private final Map<String, ByteBuffer> readBufferMap = new HashMap<>(BYTE_BUFFER_POOL_SIZE);
     private String storePath;
     private OMSSerializer serializer = new OMSCustomSerializer();
 
@@ -65,7 +65,7 @@ public class MessageStore {
 
             writeByteBuffer = byteBufferPool.take();
             writeByteBuffer.clear();
-            serializer.serializeMessage(message,writeByteBuffer);
+            serializer.serializeMessage(message, writeByteBuffer);
 
             synchronized (writeAccess) {
                 writeChannel = writeAccess.getChannel();
@@ -99,36 +99,35 @@ public class MessageStore {
                         }
                         readAccess = new RandomAccessFile(file, "r");
                         readAccessMap.put(key, readAccess);
+                        readByteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
+                        readByteBuffer.flip();
+                        readBufferMap.put(key, readByteBuffer);
                     }
                 }
             }
             synchronized (readAccess) {
                 readChannel = readAccess.getChannel();
+                readByteBuffer = readBufferMap.get(key);
 
-                readByteBuffer = byteBufferPool.take();
-
-                readByteBuffer.clear();
-                readByteBuffer.limit(4);
-                readChannel.read(readByteBuffer);
-                if (readByteBuffer.position() == 0) {
+                if (readByteBuffer.remaining() < 4) {
+                    readByteBuffer.compact();
+                    readChannel.read(readByteBuffer);
+                    readByteBuffer.flip();
+                }
+                if (readByteBuffer.remaining() == 0) {
                     return null;
                 }
-                readByteBuffer.flip();
                 int length = readByteBuffer.getInt();
-
-                readByteBuffer.clear();
-                readByteBuffer.limit(length);
-                readChannel.read(readByteBuffer);
-                readByteBuffer.flip();
+                if (readByteBuffer.remaining() < length) {
+                    readByteBuffer.compact();
+                    readChannel.read(readByteBuffer);
+                    readByteBuffer.flip();
+                }
+                return serializer.deserializeMessage(readByteBuffer, length);
             }
-            return serializer.deserializeMessage(readByteBuffer);
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new OMSRuntimeException();
-        } finally {
-            if (null != readByteBuffer) {
-                byteBufferPool.add(readByteBuffer);
-            }
         }
     }
 }

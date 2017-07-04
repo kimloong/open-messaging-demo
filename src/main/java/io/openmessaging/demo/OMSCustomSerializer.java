@@ -39,11 +39,10 @@ public class OMSCustomSerializer implements OMSSerializer {
     }
 
     @Override
-    public Message deserializeMessage(ByteBuffer byteBuffer) {
-        int totalLength = byteBuffer.remaining() - 8;
+    public Message deserializeMessage(ByteBuffer byteBuffer,int length) {
         int headerLength = byteBuffer.getInt();
         int propertiesLength = byteBuffer.getInt();
-        int bodyLength = totalLength - headerLength - propertiesLength;
+        int bodyLength = length - headerLength - propertiesLength - 8;
 
         byte[] body = new byte[bodyLength];
         byteBuffer.get(body);
