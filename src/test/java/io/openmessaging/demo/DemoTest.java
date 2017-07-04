@@ -45,6 +45,7 @@ public class DemoTest {
 
         long start = System.currentTimeMillis();
         for (int i = 0; i < TIMES; i++) {
+            sendMessage.putHeaders(MessageHeader.MESSAGE_ID, "" + i);
             producer.send(sendMessage);
         }
         long t1 = System.currentTimeMillis() - start;
@@ -58,7 +59,7 @@ public class DemoTest {
             receiveMessage = consumer1.poll();
         }
         long t2 = System.currentTimeMillis() - start;
-        System.out.printf("write cost:%5d,read cost:%5d,mps:%d\n", t1, t2, TIMES*1000 / (t1 + t2));
+        System.out.printf("write cost:%5d,read cost:%5d,mps:%d\n", t1, t2, TIMES * 1000 / (t1 + t2));
         System.out.println(sendMessage.equals(receiveMessage));
     }
 }

@@ -97,11 +97,11 @@ public class MessageStore {
                         if (!file.exists()) {
                             return null;
                         }
-                        readAccess = new RandomAccessFile(file, "r");
-                        readAccessMap.put(key, readAccess);
                         readByteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
                         readByteBuffer.flip();
                         readBufferMap.put(key, readByteBuffer);
+                        readAccess = new RandomAccessFile(file, "r");
+                        readAccessMap.put(key, readAccess);
                     }
                 }
             }
