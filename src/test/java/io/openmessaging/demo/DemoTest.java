@@ -12,13 +12,18 @@ import java.util.Random;
  */
 public class DemoTest {
 
+    public static final int TIMES = 100_000;
+
     public static void main(String[] args) throws IOException {
         KeyValue properties = new DefaultKeyValue();
         properties.put("STORE_PATH", "/home/closer-pcc/om");
         Producer producer = new DefaultProducer(properties);
         String queue1 = "QUEUE1";
         String topic1 = "TOPIC1";
-        Message sendMessage = producer.createBytesMessageToQueue(queue1, topic1.getBytes());
+        Random random = new Random();
+        byte[] bodyBytes = new byte[32 * 1024];
+        random.nextBytes(bodyBytes);
+        Message sendMessage = producer.createBytesMessageToQueue(queue1, bodyBytes);
 
         sendMessage.putHeaders(MessageHeader.BORN_TIMESTAMP, new Date().getTime());
         sendMessage.putHeaders(MessageHeader.BORN_HOST, "SOME_BORN_HOST");
@@ -38,21 +43,22 @@ public class DemoTest {
         sendMessage.putProperties("property_double", 3.14D);
         sendMessage.putProperties("property_long", new Date().getTime());
 
-        producer.send(sendMessage);
-        //请保证数据写入磁盘中
-        producer.flush();
-
-        producer.send(sendMessage);
-        //请保证数据写入磁盘中
-        producer.flush();
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < TIMES; i++) {
+            producer.send(sendMessage);
+        }
+        long t1 = System.currentTimeMillis() - start;
 
         PullConsumer consumer1 = new DefaultPullConsumer(properties);
         consumer1.attachQueue(queue1, Collections.singletonList(topic1));
 
-        Message receiveMessage = consumer1.poll();
-        System.out.println(sendMessage.equals(receiveMessage));
-
-        receiveMessage = consumer1.poll();
+        start = System.currentTimeMillis();
+        Message receiveMessage = null;
+        for (int i = 0; i < TIMES; i++) {
+            receiveMessage = consumer1.poll();
+        }
+        long t2 = System.currentTimeMillis() - start;
+        System.out.printf("write cost:%5d,read cost:%5d,mps:%d\n", t1, t2, TIMES*1000 / (t1 + t2));
         System.out.println(sendMessage.equals(receiveMessage));
     }
 }
