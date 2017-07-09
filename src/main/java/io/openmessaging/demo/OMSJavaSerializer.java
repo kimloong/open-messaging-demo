@@ -10,9 +10,9 @@ import java.nio.ByteBuffer;
  * 使用JAVA内建的序列化方式
  * Created by KimLoong on 17-6-28.
  */
-public class OMSJavaSerializer implements OMSSerializer{
+public class OMSJavaSerializer implements OMSSerializer {
 
-    public void serializeMessage(Message message,ByteBuffer byteBuffer) {
+    public void serializeMessage(Message message, ByteBuffer byteBuffer) {
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         try (ObjectOutputStream outputStream = new ObjectOutputStream(byteArrayOutputStream)) {
             outputStream.writeObject(message);
@@ -26,7 +26,7 @@ public class OMSJavaSerializer implements OMSSerializer{
         }
     }
 
-    public Message deserializeMessage(ByteBuffer byteBuffer) {
+    public Message deserializeMessage(ByteBuffer byteBuffer, int length) {
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(
                 byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
         try (ObjectInputStream inputStream = new ObjectInputStream(byteArrayInputStream)) {

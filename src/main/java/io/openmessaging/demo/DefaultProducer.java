@@ -81,6 +81,6 @@ public class DefaultProducer  implements Producer {
     }
 
     @Override public void flush() {
-
+        messageStore.flush();
     }
 }

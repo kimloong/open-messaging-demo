@@ -14,7 +14,7 @@ public class DemoTest {
 
     public static void main(String[] args) throws IOException {
         KeyValue properties = new DefaultKeyValue();
-        properties.put("STORE_PATH", "/home/closer-pcc/om");
+        properties.put("STORE_PATH", "/home/closer/om");
         Producer producer = new DefaultProducer(properties);
         String queue1 = "QUEUE1";
         String topic1 = "TOPIC1";

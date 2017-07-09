@@ -50,6 +50,7 @@ public class DemoTester {
             producer.send(messagesForQueue1.get(i));
             producer.send(messagesForQueue2.get(i));
         }
+        producer.flush();
         long end = System.currentTimeMillis();
 
         long T1 = end - start;
@@ -74,16 +75,18 @@ public class DemoTester {
                 String queue = message.headers().getString(MessageHeader.QUEUE);
                 //实际测试时，会一一比较各个字段
                 if (topic != null) {
+                    System.out.println(topic1);
+                    System.out.println(topic1Offset);
                     Assert.assertEquals(topic1, topic);
+                    Assert.assertEquals(messagesForTopic1.get(topic1Offset), message);
                     topic1Offset++;
-//                    Assert.assertEquals(messagesForTopic1.get(topic1Offset), message);
                 } else {
-                    if (queue.equals("TOPIC1")) {
-                        System.out.println(queue);
-                    }
+                    System.out.println(queue1);
+                    System.out.println(queue1Offset);
+                    System.out.println(new String(((DefaultBytesMessage)message).getBody()));
                     Assert.assertEquals(queue1, queue);
+                    Assert.assertEquals(messagesForQueue1.get(queue1Offset), message);
                     queue1Offset++;
-//                    Assert.assertEquals(messagesForQueue1.get(queue1Offset), message);
                 }
             }
             long endConsumer = System.currentTimeMillis();

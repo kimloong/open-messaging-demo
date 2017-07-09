@@ -16,11 +16,13 @@ import static org.junit.Assert.assertEquals;
 public class OMSJavaSerializerTest {
 
     private final static int[] BODY_LENGTHS = new int[]{1 * 1024, 32 * 1024, 32 * 1024, 64 * 1024, 128 * 1024};
-    private final static int TIMES = 100_000;
+//    private final static int TIMES = 100_000;
+    private final static int TIMES = 1;
 
     @Test
     public void test() {
-        OMSSerializer[] serializers = new OMSSerializer[]{new OMSJavaSerializer(), new OMSCustomSerializer()};
+        OMSSerializer[] serializers = new OMSSerializer[]{
+                new OMSJavaSerializer(), new OMSCustomSerializer(256 * 1024)};
 
         for (int bodyLength : BODY_LENGTHS) {
             DefaultBytesMessage message = createMessage(bodyLength);
@@ -42,7 +44,7 @@ public class OMSJavaSerializerTest {
                 DefaultBytesMessage deserializeMessage = null;
                 startTime = System.currentTimeMillis();
                 for (int i = 0; i < TIMES; i++) {
-                    deserializeMessage = (DefaultBytesMessage) serializer.deserializeMessage(byteBuffer);
+                    deserializeMessage = (DefaultBytesMessage) serializer.deserializeMessage(byteBuffer, totalLength);
                     byteBuffer.position(4);
                 }
                 cost = System.currentTimeMillis() - startTime;

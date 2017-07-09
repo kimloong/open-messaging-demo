@@ -3,9 +3,12 @@ package io.openmessaging.demo;
 import io.openmessaging.BytesMessage;
 import io.openmessaging.KeyValue;
 import io.openmessaging.Message;
+import io.openmessaging.exception.OMSRuntimeException;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 
 import static io.openmessaging.MessageHeader.*;
 
@@ -16,37 +19,61 @@ public class OMSCustomSerializer implements OMSSerializer {
 
     public static final Charset CHARSET = Charset.forName("UTF-8");
 
+    private static final int BYTE_BUFFER_POOL_SIZE = 20;
+    //用于在序列化时保存header与properties的ByteBuffer池
+    private final BlockingQueue<ByteBuffer> byteBufferPool = new LinkedBlockingDeque<>(BYTE_BUFFER_POOL_SIZE);
+
+    public OMSCustomSerializer(int maxMessageSize) {
+        for (int i = 0; i < BYTE_BUFFER_POOL_SIZE; i++) {
+            byteBufferPool.add(ByteBuffer.allocate(maxMessageSize / 2));
+        }
+    }
+
     @Override
     public void serializeMessage(Message message, ByteBuffer byteBuffer) {
         if (message instanceof BytesMessage) {
-            BytesMessage bytesMessage = (BytesMessage) message;
-            byteBuffer.position(12);
+            ByteBuffer otherBuffer = null;
+            try {
+                BytesMessage bytesMessage = (BytesMessage) message;
 
-            int bodyLength = bytesMessage.getBody().length;
-            byteBuffer.put(bytesMessage.getBody());
-            int headerLength = serializeHeaders(bytesMessage.headers(), byteBuffer);
-            int propertiesLength = serializeProperties(bytesMessage.properties(), byteBuffer);
 
-            byteBuffer.flip();
-            int totalLength = bodyLength + headerLength + propertiesLength + 8;
-            byteBuffer.putInt(totalLength);
-            byteBuffer.putInt(headerLength);
-            byteBuffer.putInt(propertiesLength);
-            byteBuffer.position(0);
+                otherBuffer = byteBufferPool.take();
+                otherBuffer.clear();
+                int headerLength = serializeHeaders(bytesMessage.headers(), otherBuffer);
+                int propertiesLength = serializeProperties(bytesMessage.properties(), otherBuffer);
+
+                int totalLength = bytesMessage.getBody().length + headerLength
+                        + propertiesLength + 8;
+                byteBuffer.putInt(totalLength);
+                byteBuffer.putInt(headerLength);
+                byteBuffer.putInt(propertiesLength);
+                byteBuffer.put(bytesMessage.getBody());
+                otherBuffer.flip();
+                byteBuffer.put(otherBuffer);
+
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                throw new OMSRuntimeException();
+            } finally {
+                if (null != otherBuffer) {
+                    byteBufferPool.add(otherBuffer);
+                }
+            }
+
         } else {
             throw new UnsupportedOperationException("unsupported serialize not BytesMessage");
         }
     }
 
     @Override
-    public Message deserializeMessage(ByteBuffer byteBuffer) {
-        int totalLength = byteBuffer.remaining() - 8;
+    public Message deserializeMessage(ByteBuffer byteBuffer, int totalLength) {
         int headerLength = byteBuffer.getInt();
         int propertiesLength = byteBuffer.getInt();
-        int bodyLength = totalLength - headerLength - propertiesLength;
+        int bodyLength = totalLength - headerLength - propertiesLength - 8;
 
         byte[] body = new byte[bodyLength];
         byteBuffer.get(body);
+
         BytesMessage bytesMessage = new DefaultBytesMessage(body);
         deserializeHeaders(bytesMessage, byteBuffer, headerLength);
         deserializeProperties(bytesMessage, byteBuffer, propertiesLength);
@@ -243,21 +270,23 @@ public class OMSCustomSerializer implements OMSSerializer {
 
     private void deserializeProperty(BytesMessage bytesMessage, ByteBuffer byteBuffer) {
         short keyLength = byteBuffer.getShort();
-        String key = new String(byteBuffer.array(), byteBuffer.position(), keyLength, CHARSET);
-        byteBuffer.position(byteBuffer.position() + keyLength);
+        byte[] keyBytes = new byte[keyLength];
+        byteBuffer.get(keyBytes);
+        String key = new String(keyBytes, CHARSET);
         byte valueTypeByte = byteBuffer.get();
         switch (valueTypeByte) {
             case 0:
                 short longStringBytesLength = byteBuffer.getShort();
-                String longStringValue = new String(
-                        byteBuffer.array(), byteBuffer.position(), longStringBytesLength, CHARSET);
-                byteBuffer.position(byteBuffer.position() + longStringBytesLength);
+                byte[] longStringValueBytes = new byte[longStringBytesLength];
+                byteBuffer.get(longStringValueBytes);
+                String longStringValue = new String(longStringValueBytes, CHARSET);
                 bytesMessage.putProperties(key, longStringValue);
                 break;
             case 1:
                 byte valueBytesLength = byteBuffer.get();
-                String value = new String(byteBuffer.array(), byteBuffer.position(), valueBytesLength, CHARSET);
-                byteBuffer.position(byteBuffer.position() + valueBytesLength);
+                byte[] valueBytes = new byte[valueBytesLength];
+                byteBuffer.get(valueBytes);
+                String value = new String(valueBytes, CHARSET);
                 bytesMessage.putProperties(key, value);
                 break;
             case 2:
@@ -284,10 +313,9 @@ public class OMSCustomSerializer implements OMSSerializer {
 
     private String deserializeStringHeader(ByteBuffer byteBuffer) {
         short length = byteBuffer.getShort();
-        //highlight 减少一次byte数组复杂
-        String result = new String(byteBuffer.array(), byteBuffer.position(), length, CHARSET);
-        byteBuffer.position(byteBuffer.position() + length);
-        return result;
+        byte[] bytes = new byte[length];
+        byteBuffer.get(bytes);
+        return new String(bytes, CHARSET);
     }
 
     private static void serializeLongHeader(byte headerByte, long value, ByteBuffer byteBuffer) {
