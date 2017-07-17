@@ -5,12 +5,13 @@ import io.openmessaging.*;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Date;
-import java.util.Random;
 
 /**
  * Created by Zhang JinLong(150429) on 2017-06-28.
  */
 public class DemoTest {
+
+    private static final int TIMES = 1_000_000;
 
     public static void main(String[] args) throws IOException {
         KeyValue properties = new DefaultKeyValue();
@@ -38,21 +39,20 @@ public class DemoTest {
         sendMessage.putProperties("property_double", 3.14D);
         sendMessage.putProperties("property_long", new Date().getTime());
 
-        producer.send(sendMessage);
-        //请保证数据写入磁盘中
-        producer.flush();
-
-        producer.send(sendMessage);
+        for (int i = 0; i < TIMES; i++) {
+            producer.send(sendMessage);
+        }
         //请保证数据写入磁盘中
         producer.flush();
 
         PullConsumer consumer1 = new DefaultPullConsumer(properties);
         consumer1.attachQueue(queue1, Collections.singletonList(topic1));
 
-        Message receiveMessage = consumer1.poll();
-        System.out.println(sendMessage.equals(receiveMessage));
-
-        receiveMessage = consumer1.poll();
+        Message receiveMessage = null;
+        for (int i = 0; i < TIMES; i++) {
+            System.out.println(i);
+            receiveMessage = consumer1.poll();
+        }
         System.out.println(sendMessage.equals(receiveMessage));
     }
 }

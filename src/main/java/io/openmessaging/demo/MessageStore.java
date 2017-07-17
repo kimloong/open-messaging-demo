@@ -16,7 +16,7 @@ public class MessageStore {
 
     private static final MessageStore INSTANCE = new MessageStore();
 
-    private static final int BUFFER_SIZE = 10 * 1024 * 1024;
+    private static final int BUFFER_SIZE = 64 * 1024 * 1024;
     private static final int MAX_MESSAGE_SIZE = 256 * 1024;
 
     private final Map<String, RandomAccessFile> writeAccessMap = new HashMap<>();
@@ -45,9 +45,10 @@ public class MessageStore {
                     if (null == writeAccess) {
                         File file = new File(storePath, bucket);
                         writeAccess = new RandomAccessFile(file, "rw");
-                        if (!file.createNewFile()) {
-                            writeAccess.seek(file.length());
-                        }
+                        file.createNewFile();
+                        MappedByteBuffer buffer = writeAccess.getChannel().map(
+                                FileChannel.MapMode.READ_WRITE, 0, BUFFER_SIZE);
+                        writeBufferMap.put(bucket, buffer);
                         writeAccessMap.put(bucket, writeAccess);
                     }
                 }
@@ -58,15 +59,14 @@ public class MessageStore {
                 FileChannel writeChannel = writeAccess.getChannel();
                 MappedByteBuffer buffer = writeBufferMap.get(bucket);
 
-                if (buffer == null || buffer.remaining() < MAX_MESSAGE_SIZE) {
+                if (buffer.remaining() < MAX_MESSAGE_SIZE) {
+                    long position = writeChannel.position() + buffer.position();
+                    writeChannel.position(position);
                     buffer = writeChannel.map(
-                            FileChannel.MapMode.READ_WRITE, writeChannel.position(), BUFFER_SIZE);
+                            FileChannel.MapMode.READ_WRITE, position, BUFFER_SIZE);
                     writeBufferMap.put(bucket, buffer);
                 }
                 serializer.serializeMessage(message, buffer);
-                if (buffer.remaining() < MAX_MESSAGE_SIZE) {
-                    buffer.force();
-                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -87,6 +87,9 @@ public class MessageStore {
                             return null;
                         }
                         readAccess = new RandomAccessFile(file, "r");
+                        MappedByteBuffer buffer = readAccess.getChannel().map(
+                                FileChannel.MapMode.READ_ONLY, 0, BUFFER_SIZE);
+                        readBufferMap.put(key, buffer);
                         readAccessMap.put(key, readAccess);
                     }
                 }
@@ -96,23 +99,16 @@ public class MessageStore {
                 FileChannel readChannel = readAccess.getChannel();
                 MappedByteBuffer buffer = readBufferMap.get(key);
 
-                if (buffer == null || buffer.remaining() == 0) {
+                if (buffer.remaining() < MAX_MESSAGE_SIZE) {
+                    long position = readChannel.position() + buffer.position();
+                    readChannel.position(position);
                     buffer = readChannel.map(
                             FileChannel.MapMode.READ_ONLY, readChannel.position(), BUFFER_SIZE);
                     readBufferMap.put(key, buffer);
                 }
 
-                if (buffer.remaining() == 0) {
-                    return null;
-                }
-
                 int length = buffer.getInt();
-                if (buffer.remaining() < length) {
-                    buffer = readChannel.map(
-                            FileChannel.MapMode.READ_ONLY, readChannel.position() - buffer.remaining(), BUFFER_SIZE);
-                    readBufferMap.put(key, buffer);
-                    buffer.flip();
-                } else if (length == 0) {
+                if (length == 0) {
                     return null;
                 }
 
