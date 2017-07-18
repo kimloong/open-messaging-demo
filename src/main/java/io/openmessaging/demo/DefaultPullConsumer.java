@@ -3,11 +3,8 @@ package io.openmessaging.demo;
 import io.openmessaging.KeyValue;
 import io.openmessaging.Message;
 import io.openmessaging.PullConsumer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+
+import java.util.*;
 
 public class DefaultPullConsumer implements PullConsumer {
     private MessageStore messageStore;
