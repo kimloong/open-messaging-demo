@@ -12,6 +12,8 @@ import java.nio.channels.FileChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static java.lang.Math.min;
+
 public class MessageStore {
 
     private static final MessageStore INSTANCE = new MessageStore();
@@ -19,11 +21,11 @@ public class MessageStore {
     private static final int BUFFER_SIZE = 64 * 1024 * 1024;
     private static final int MAX_MESSAGE_SIZE = 256 * 1024;
 
-    private final Map<String, RandomAccessFile> writeAccessMap = new ConcurrentHashMap<>();
-    private final Map<String, MappedByteBuffer> writeBufferMap = new ConcurrentHashMap<>();
+    private final Map<String, RandomAccessFile> writeAccessMap = new ConcurrentHashMap<>(128);
+    private final Map<String, MappedByteBuffer> writeBufferMap = new ConcurrentHashMap<>(128);
 
-    private final Map<String, RandomAccessFile> readAccessMap = new ConcurrentHashMap<>();
-    private final Map<String, MappedByteBuffer> readBufferMap = new ConcurrentHashMap<>();
+    private final Map<String, RandomAccessFile> readAccessMap = new ConcurrentHashMap<>(128);
+    private final Map<String, MappedByteBuffer> readBufferMap = new ConcurrentHashMap<>(128);
 
     private String storePath;
     private OMSSerializer serializer = new OMSCustomSerializer(MAX_MESSAGE_SIZE);
@@ -46,6 +48,9 @@ public class MessageStore {
                         File file = new File(storePath, bucket);
                         writeAccess = new RandomAccessFile(file, "rw");
                         file.createNewFile();
+                        MappedByteBuffer buffer = writeAccess.getChannel().map(
+                                FileChannel.MapMode.READ_WRITE, 0, BUFFER_SIZE);
+                        writeBufferMap.put(bucket, buffer);
                         writeAccessMap.put(bucket, writeAccess);
                     }
                 }
@@ -56,11 +61,7 @@ public class MessageStore {
                 FileChannel writeChannel = writeAccess.getChannel();
                 MappedByteBuffer buffer = writeBufferMap.get(bucket);
 
-                if (null == buffer) {
-                    buffer = writeAccess.getChannel().map(
-                            FileChannel.MapMode.READ_WRITE, 0, BUFFER_SIZE);
-                    writeBufferMap.put(bucket, buffer);
-                } else if (buffer.remaining() < MAX_MESSAGE_SIZE) {
+                if (buffer.remaining() < MAX_MESSAGE_SIZE) {
                     long position = writeChannel.position() + buffer.position();
                     writeChannel.position(position);
                     buffer = writeChannel.map(
@@ -88,6 +89,9 @@ public class MessageStore {
                             return null;
                         }
                         readAccess = new RandomAccessFile(file, "r");
+                        MappedByteBuffer buffer = readAccess.getChannel().map(
+                                FileChannel.MapMode.READ_ONLY, 0, BUFFER_SIZE);
+                        readBufferMap.put(key, buffer);
                         readAccessMap.put(key, readAccess);
                     }
                 }
@@ -97,15 +101,15 @@ public class MessageStore {
                 FileChannel readChannel = readAccess.getChannel();
                 MappedByteBuffer buffer = readBufferMap.get(key);
 
-                if (null == buffer) {
-                    buffer = readAccess.getChannel().map(
-                            FileChannel.MapMode.READ_ONLY, 0, BUFFER_SIZE);
-                    readBufferMap.put(key, buffer);
-                } else if (buffer.remaining() < MAX_MESSAGE_SIZE) {
+                if (buffer.remaining() < MAX_MESSAGE_SIZE && buffer.limit() >= MAX_MESSAGE_SIZE) {
                     long position = readChannel.position() + buffer.position();
+                    long bufferSize = min(readAccess.length() - position, BUFFER_SIZE);
+                    if (bufferSize == 0) {
+                        return null;
+                    }
                     readChannel.position(position);
                     buffer = readChannel.map(
-                            FileChannel.MapMode.READ_ONLY, readChannel.position(), BUFFER_SIZE);
+                            FileChannel.MapMode.READ_ONLY, readChannel.position(), bufferSize);
                     readBufferMap.put(key, buffer);
                 }
 

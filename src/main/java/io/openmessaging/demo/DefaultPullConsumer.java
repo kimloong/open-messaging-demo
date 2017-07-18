@@ -26,7 +26,7 @@ public class DefaultPullConsumer implements PullConsumer {
     }
 
 
-    @Override public synchronized Message poll() {
+    @Override public Message poll() {
         if (buckets.size() == 0 || queue == null) {
             return null;
         }

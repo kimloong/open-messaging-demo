@@ -19,7 +19,7 @@ public class DemoTest {
         Producer producer = new DefaultProducer(properties);
         String queue1 = "QUEUE1";
         String topic1 = "TOPIC1";
-        Message sendMessage = producer.createBytesMessageToQueue(queue1, topic1.getBytes());
+        Message sendMessage = producer.createBytesMessageToQueue(queue1, new byte[4 * 1024]);
 
         sendMessage.putHeaders(MessageHeader.BORN_TIMESTAMP, new Date().getTime());
         sendMessage.putHeaders(MessageHeader.BORN_HOST, "SOME_BORN_HOST");
@@ -50,7 +50,6 @@ public class DemoTest {
 
         Message receiveMessage = null;
         for (int i = 0; i < TIMES; i++) {
-            System.out.println(i);
             receiveMessage = consumer1.poll();
         }
         System.out.println(sendMessage.equals(receiveMessage));
