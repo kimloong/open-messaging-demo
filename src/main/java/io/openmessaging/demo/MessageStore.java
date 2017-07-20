@@ -12,8 +12,6 @@ import java.nio.channels.FileChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static java.lang.Math.min;
-
 public class MessageStore {
 
     private static final MessageStore INSTANCE = new MessageStore();
@@ -88,7 +86,7 @@ public class MessageStore {
                         if (!file.exists()) {
                             return null;
                         }
-                        readAccess = new RandomAccessFile(file, "r");
+                        readAccess = new RandomAccessFile(file, "rw");
                         MappedByteBuffer buffer = readAccess.getChannel().map(
                                 FileChannel.MapMode.READ_ONLY, 0, BUFFER_SIZE);
                         readBufferMap.put(key, buffer);
@@ -101,20 +99,17 @@ public class MessageStore {
                 FileChannel readChannel = readAccess.getChannel();
                 MappedByteBuffer buffer = readBufferMap.get(key);
 
-                if (buffer.remaining() < MAX_MESSAGE_SIZE && buffer.limit() >= MAX_MESSAGE_SIZE) {
+                if (buffer.remaining() < MAX_MESSAGE_SIZE) {
                     long position = readChannel.position() + buffer.position();
-                    long bufferSize = min(readAccess.length() - position, BUFFER_SIZE);
-                    if (bufferSize == 0) {
-                        return null;
-                    }
                     readChannel.position(position);
                     buffer = readChannel.map(
-                            FileChannel.MapMode.READ_ONLY, readChannel.position(), bufferSize);
+                            FileChannel.MapMode.READ_ONLY, readChannel.position(), BUFFER_SIZE);
                     readBufferMap.put(key, buffer);
                 }
 
                 int length = buffer.getInt();
                 if (length == 0) {
+                    buffer.position(buffer.position() - 4);
                     return null;
                 }
 

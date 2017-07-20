@@ -5,6 +5,7 @@ import io.openmessaging.*;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Random;
 
 /**
  * Created by Zhang JinLong(150429) on 2017-06-28.
@@ -15,11 +16,14 @@ public class DemoTest {
 
     public static void main(String[] args) throws IOException {
         KeyValue properties = new DefaultKeyValue();
-        properties.put("STORE_PATH", "/home/closer/om");
+        properties.put("STORE_PATH", "/home/closer-pcc/om");
         Producer producer = new DefaultProducer(properties);
         String queue1 = "QUEUE1";
         String topic1 = "TOPIC1";
-        Message sendMessage = producer.createBytesMessageToQueue(queue1, new byte[4 * 1024]);
+        Random random = new Random();
+        byte[] body = new byte[4 * 1024];
+        random.nextBytes(body);
+        Message sendMessage = producer.createBytesMessageToQueue(queue1, body);
 
         sendMessage.putHeaders(MessageHeader.BORN_TIMESTAMP, new Date().getTime());
         sendMessage.putHeaders(MessageHeader.BORN_HOST, "SOME_BORN_HOST");
@@ -49,9 +53,15 @@ public class DemoTest {
         consumer1.attachQueue(queue1, Collections.singletonList(topic1));
 
         Message receiveMessage = null;
+        int receiveCount = 0;
         for (int i = 0; i < TIMES; i++) {
             receiveMessage = consumer1.poll();
+            if (null == receiveMessage) {
+                continue;
+            }
+            receiveCount++;
         }
         System.out.println(sendMessage.equals(receiveMessage));
+        System.out.println(receiveCount == TIMES);
     }
 }
